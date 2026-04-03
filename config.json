@@ -41,9 +41,9 @@
             "games_list": {
                 "game1": {
                     "title": "Men in Mayday",
-                    "description": "A realistic island survival experience where every decision matters. Stranded alone in a vast, untamed wilderness, you must gather resources, craft tools, and adapt to a constantly changing environment to stay alive. From chopping down trees and building shelter to managing hunger, thirst, and stamina, survival depends on your ability to plan ahead and use what nature provides. Explore dense forests, shifting weather, and a dynamic day-night cycle that transforms the island into both a place of beauty and danger. Progression is driven by your choices—upgrade your tools, improve your efficiency, and shape your own path through the wild. This is not just about surviving… it's about mastering the environment.",
+                    "description": "A realistic island survival experience where every decision matters. Stranded alone in a vast, untamed wilderness, you must gather resources, craft tools, and adapt to a constantly changing environment to stay alive. From chopping down trees and building shelter to managing hunger, thirst, and stamina, survival depends on your ability to plan ahead and use what nature provides. Explore dense forests, shifting weather, and a dynamic day-night cycle that transforms the island into both a place of beauty and danger. Progression is driven by your choices - upgrade your tools, improve your efficiency, and shape your own path through the wild. This is not just about surviving - it is about mastering the environment.",
                     "tagline": "Survive the island. Master the wild.",
-                    "status": "In Development, Coming Soon!"
+                    "status": "In development - coming soon."
                 }
             }
         },
@@ -72,13 +72,13 @@
         }
     },
     "emailjs": {
-        "public_key": "YOUR_EMAILJS_PUBLIC_KEY",
-        "service_id": "YOUR_EMAILJS_SERVICE_ID",
-        "template_id": "YOUR_EMAILJS_TEMPLATE_ID"
+        "public_key": "on_L5ZeEK0nK2p54_",
+        "service_id": "service_gdv2brk",
+        "template_id": "template_nxb3c4o"
     },
     "seo_metadata": {
         "title": "Incarnation Studios | Immersive Tactical Gaming",
-        "meta_description": "Incarnation Studios: Creators of Men in Mayday. Experience high-stakes, tactical survival on a realistic untamed island. Master the environment or perish.",
+        "meta_description": "Incarnation Studios: creators of Men in Mayday. Experience high-stakes tactical survival on a realistic, untamed island. Master the environment or perish.",
         "keywords": [
             "Incarnation Studios", "Men in Mayday", "Men in Mayday game", "tactical survival games", 
             "realistic survival experience", "island survival simulator", "hardcore survival 2025", 

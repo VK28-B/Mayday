@@ -3,7 +3,14 @@
 
   const OFFICIAL_EMAIL = "incarnation.studios.official@gmail.com";
   const EMAIL_SEND_TIMEOUT_MS = 15000;
+  const MAIN_ROUTE = "";
   const MAYDAY_ROUTE = "men-in-mayday";
+  const LOGIN_ROUTE = "login";
+  const SIGNUP_ROUTE = "signup";
+  const PROFILE_ROUTE = "profile";
+  const SETTINGS_ROUTE = "account-settings";
+  const AUTH_USERS_KEY = "incarnation-auth-users";
+  const AUTH_SESSION_KEY = "incarnation-auth-session";
 
   const FALLBACK_CONFIG = {
     name: "Incarnation Studios",
@@ -26,7 +33,7 @@
             description:
               "A realistic island survival experience where every decision matters. Stranded alone in a vast, untamed wilderness, you must gather resources, craft tools, and adapt to a constantly changing environment to stay alive. From chopping down trees and building shelter to managing hunger, thirst, and stamina, survival depends on your ability to plan ahead and use what nature provides. Explore dense forests, shifting weather, and a dynamic day-night cycle that transforms the island into both a place of beauty and danger. Progression is driven by your choices - upgrade your tools, improve your efficiency, and shape your own path through the wild. This is not just about surviving - it's about mastering the environment.",
             tagline: "Survive the island. Master the wild.",
-            status: "In Development, Coming Soon!"
+            status: "In development - coming soon."
           }
         }
       }
@@ -115,20 +122,37 @@
     progress: 0,
     preloaderTimer: null,
     cleanupFns: [],
-    emailJsInitializedFor: ""
+    emailJsInitializedFor: "",
+    currentUser: null
   };
 
-  function isMaydayRoute() {
+  function getCurrentRoute() {
     try {
-      return new URLSearchParams(window.location.search).get("page") === MAYDAY_ROUTE;
+      return asText(new URLSearchParams(window.location.search).get("page"), MAIN_ROUTE).toLowerCase();
     } catch (error) {
-      return false;
+      return MAIN_ROUTE;
     }
   }
 
+  function isMainRoute() {
+    return getCurrentRoute() === MAIN_ROUTE;
+  }
+
+  function isMaydayRoute() {
+    return getCurrentRoute() === MAYDAY_ROUTE;
+  }
+
+  function shouldUsePreloader() {
+    const route = getCurrentRoute();
+    const knownRoutes = [MAIN_ROUTE, MAYDAY_ROUTE, LOGIN_ROUTE, SIGNUP_ROUTE, PROFILE_ROUTE, SETTINGS_ROUTE];
+    return knownRoutes.indexOf(route) === -1 || route === MAIN_ROUTE;
+  }
+
+  appState.currentUser = getAuthenticatedUser();
+
   applyTheme(getStoredTheme());
   renderCurrentView(appState.config);
-  if (!isMaydayRoute()) {
+  if (shouldUsePreloader()) {
     startPreloader();
   }
   initializeRuntime();
@@ -145,7 +169,7 @@
       initializeRuntime();
     })
     .finally(() => {
-      if (!isMaydayRoute()) {
+      if (shouldUsePreloader()) {
         completePreloader();
       }
     });
@@ -161,6 +185,110 @@
   function applyTheme(theme) {
     const isLight = theme === "light";
     document.body.classList.toggle("theme-light", isLight);
+  }
+
+  function getAuthUsers() {
+    try {
+      const raw = localStorage.getItem(AUTH_USERS_KEY);
+      if (!raw) {
+        return [];
+      }
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function setAuthUsers(users) {
+    try {
+      localStorage.setItem(AUTH_USERS_KEY, JSON.stringify(Array.isArray(users) ? users : []));
+    } catch (error) {
+      /* ignore storage errors */
+    }
+  }
+
+  function getAuthSession() {
+    try {
+      const raw = localStorage.getItem(AUTH_SESSION_KEY);
+      const sessionRaw = raw || sessionStorage.getItem(AUTH_SESSION_KEY);
+      if (!sessionRaw) {
+        return null;
+      }
+      const parsed = JSON.parse(sessionRaw);
+      if (!parsed || typeof parsed !== "object") {
+        return null;
+      }
+      return parsed;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function setAuthSession(session, persistAcrossBrowserRestarts) {
+    const persist = persistAcrossBrowserRestarts !== false;
+    try {
+      const value = JSON.stringify(session);
+      if (persist) {
+        localStorage.setItem(AUTH_SESSION_KEY, value);
+        sessionStorage.removeItem(AUTH_SESSION_KEY);
+      } else {
+        sessionStorage.setItem(AUTH_SESSION_KEY, value);
+        localStorage.removeItem(AUTH_SESSION_KEY);
+      }
+    } catch (error) {
+      /* ignore storage errors */
+    }
+  }
+
+  function clearAuthSession() {
+    try {
+      localStorage.removeItem(AUTH_SESSION_KEY);
+      sessionStorage.removeItem(AUTH_SESSION_KEY);
+    } catch (error) {
+      /* ignore storage errors */
+    }
+  }
+
+  function getAuthenticatedUser() {
+    const session = getAuthSession();
+    if (!session || !session.userId) {
+      return null;
+    }
+    const users = getAuthUsers();
+    const match = users.find((user) => user && user.id === session.userId);
+    return match || null;
+  }
+
+  function createUserId() {
+    return "u_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 9);
+  }
+
+  function getUserInitials(name) {
+    const safe = asText(name, "Player");
+    const parts = safe.split(/\s+/).filter(Boolean).slice(0, 2);
+    if (!parts.length) {
+      return "PL";
+    }
+    return parts.map((part) => part.charAt(0).toUpperCase()).join("");
+  }
+
+  function persistUser(updatedUser) {
+    const users = getAuthUsers();
+    const hasMatch = users.some((user) => user && user.id === updatedUser.id);
+    const nextUsers = hasMatch
+      ? users.map((user) => (user.id === updatedUser.id ? updatedUser : user))
+      : users.concat([updatedUser]);
+    setAuthUsers(nextUsers);
+    const current = getAuthenticatedUser();
+    if (current && current.id === updatedUser.id) {
+      appState.currentUser = updatedUser;
+    }
+  }
+
+  function logoutCurrentUser() {
+    clearAuthSession();
+    appState.currentUser = null;
   }
 
   function loadConfig() {
@@ -273,21 +401,59 @@
         status: asText(sourceGame.status, fallbackGame.status)
       },
       emailjs: {
-        publicKey: asText(
-          sourceEmailJs.public_key || sourceEmailJs.publicKey || inlineEmailJs.public_key || inlineEmailJs.publicKey,
+        publicKey: pickConfiguredValue([
+          sourceEmailJs.public_key,
+          sourceEmailJs.publicKey,
+          inlineEmailJs.public_key,
+          inlineEmailJs.publicKey,
           FALLBACK_CONFIG.emailjs.public_key
-        ),
-        serviceId: asText(
-          sourceEmailJs.service_id || sourceEmailJs.serviceId || inlineEmailJs.service_id || inlineEmailJs.serviceId,
+        ]),
+        serviceId: pickConfiguredValue([
+          sourceEmailJs.service_id,
+          sourceEmailJs.serviceId,
+          inlineEmailJs.service_id,
+          inlineEmailJs.serviceId,
           FALLBACK_CONFIG.emailjs.service_id
-        ),
-        templateId: asText(
-          sourceEmailJs.template_id || sourceEmailJs.templateId || inlineEmailJs.template_id || inlineEmailJs.templateId,
+        ]),
+        templateId: pickConfiguredValue([
+          sourceEmailJs.template_id,
+          sourceEmailJs.templateId,
+          inlineEmailJs.template_id,
+          inlineEmailJs.templateId,
           FALLBACK_CONFIG.emailjs.template_id
-        )
+        ])
       },
       keywords: sourceKeywords.length ? sourceKeywords : FALLBACK_CONFIG.seo_metadata.keywords
     };
+  }
+
+  function pickConfiguredValue(candidates) {
+    const list = Array.isArray(candidates) ? candidates : [];
+    for (let i = 0; i < list.length; i += 1) {
+      const value = asText(list[i], "");
+      if (isConfiguredSecret(value)) {
+        return value;
+      }
+    }
+    return "";
+  }
+
+  function isConfiguredSecret(value) {
+    const text = asText(value, "");
+    if (!text) {
+      return false;
+    }
+    const upper = text.toUpperCase();
+    if (upper.indexOf("YOUR_EMAILJS") !== -1) {
+      return false;
+    }
+    if (/^YOUR[_A-Z0-9-]+$/.test(upper)) {
+      return false;
+    }
+    if (upper === "PUBLIC_KEY_HERE" || upper === "SERVICE_ID_HERE" || upper === "TEMPLATE_ID_HERE") {
+      return false;
+    }
+    return true;
   }
 
   function asText(value, fallback) {
@@ -331,7 +497,7 @@
   }
 
   function navMarkup() {
-    return NAV_ITEMS.map((item) => {
+    const baseLinks = NAV_ITEMS.map((item) => {
       return (
         '<a href="#' +
         escapeHtml(item.id) +
@@ -340,6 +506,12 @@
         "</a>"
       );
     }).join("");
+
+    const accountLink = appState.currentUser
+      ? '<a href="?page=' + PROFILE_ROUTE + '" class="nav-link">Profile</a>'
+      : '<a href="?page=' + LOGIN_ROUTE + '" class="nav-link">Login</a>';
+
+    return baseLinks + accountLink;
   }
 
   function footerNavMarkup(discord) {
@@ -361,11 +533,101 @@
     );
   }
 
+  function authNavActionsMarkup() {
+    if (appState.currentUser) {
+      return (
+        '<a href="?page=' +
+        PROFILE_ROUTE +
+        '" class="btn btn-ghost btn-glitch" data-text="Profile">Profile</a>' +
+        '<button type="button" class="btn btn-secondary btn-glitch auth-logout" data-text="Log Out">Log Out</button>'
+      );
+    }
+
+    return (
+      '<a href="?page=' +
+      LOGIN_ROUTE +
+      '" class="btn btn-ghost btn-glitch" data-text="Login">Login</a>' +
+      '<a href="?page=' +
+      SIGNUP_ROUTE +
+      '" class="btn btn-secondary btn-glitch" data-text="Sign Up">Sign Up</a>'
+    );
+  }
+
+  function routeAccountActionMarkup() {
+    if (appState.currentUser) {
+      return '<a href="?page=' + PROFILE_ROUTE + '" class="btn btn-ghost btn-glitch" data-text="Profile">Profile</a>';
+    }
+    return '<a href="?page=' + LOGIN_ROUTE + '" class="btn btn-ghost btn-glitch" data-text="Login">Login</a>';
+  }
+
+  function buildRouteUrl(page, notice) {
+    const params = new URLSearchParams();
+    if (page) {
+      params.set("page", page);
+    }
+    if (notice) {
+      params.set("notice", notice);
+    }
+    const query = params.toString();
+    return query ? "?" + query : "index.htm";
+  }
+
+  function navigateToRoute(page, notice) {
+    window.location.assign(buildRouteUrl(page, notice));
+  }
+
+  function getRouteNotice() {
+    try {
+      return asText(new URLSearchParams(window.location.search).get("notice"), "");
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function formatDateLabel(isoValue) {
+    if (!isoValue) {
+      return "Not available";
+    }
+    const parsed = new Date(isoValue);
+    if (Number.isNaN(parsed.getTime())) {
+      return "Not available";
+    }
+    return parsed.toLocaleString();
+  }
+
   function renderCurrentView(config) {
-    if (isMaydayRoute()) {
+    const route = getCurrentRoute();
+    appState.currentUser = getAuthenticatedUser();
+
+    if (route === MAYDAY_ROUTE) {
       renderMayday(config);
       return;
     }
+    if (route === LOGIN_ROUTE) {
+      renderLogin(config, getRouteNotice());
+      return;
+    }
+    if (route === SIGNUP_ROUTE) {
+      renderSignup(config);
+      return;
+    }
+    if (route === PROFILE_ROUTE) {
+      if (!appState.currentUser) {
+        renderLogin(config, "Please log in to view your profile.");
+        return;
+      }
+      renderProfile(config, appState.currentUser);
+      return;
+    }
+    if (route === SETTINGS_ROUTE) {
+      if (!appState.currentUser) {
+        renderLogin(config, "Please log in to access account settings.");
+        return;
+      }
+      renderAccountSettings(config, appState.currentUser);
+      return;
+    }
+
     renderMain(config);
   }
 
@@ -396,6 +658,7 @@
             </nav>
             <div class="nav-actions">
               <button type="button" class="theme-toggle" aria-label="Toggle color theme">${themeLabel}</button>
+              ${authNavActionsMarkup()}
               <a href="${escapeHtml(config.discord)}" target="_blank" rel="noreferrer" class="btn btn-secondary btn-glitch" data-text="Join Discord">Join Discord</a>
             </div>
           </div>
@@ -407,7 +670,10 @@
             <div class="container hero-grid">
               <div class="hero-copy reveal">
                 <p class="kicker">Immersive Tactical Gaming</p>
-                <h1 class="hero-title">${escapeHtml(config.name)} crafts immersive games that players remember.</h1>
+                <h1 class="hero-title">
+                  <span class="hero-title-primary">${escapeHtml(config.name)}</span>
+                  <span class="hero-title-secondary">Crafting immersive games players remember</span>
+                </h1>
                 <p>${escapeHtml(config.description)}</p>
 
                 <div class="hero-actions">
@@ -471,11 +737,11 @@
                 <aside class="panel mission-panel">
                   <h3 class="section-title" style="font-size: 1.22rem; margin-top: 0;">What We Stand For</h3>
                   <p class="section-copy">
-                    We combine technical discipline with creative direction to ship games that reward strategy, adaptation, and smart decision making.
+                    We combine technical discipline with creative direction to ship games that reward strategy, adaptation, and smart decision-making.
                   </p>
                   <ul class="mission-list">
                     <li>Player-first game systems with meaningful choices.</li>
-                    <li>High quality production standards and consistent polish.</li>
+                    <li>High-quality production standards and consistent polish.</li>
                     <li>Transparent communication with our community.</li>
                   </ul>
                   <div class="mini-brand">
@@ -518,9 +784,9 @@
             <div class="container">
               <div class="section-head">
                 <p class="section-kicker">Contact</p>
-                <h2 class="section-title">Transmit Inquiry</h2>
+                <h2 class="section-title">Send an Inquiry</h2>
                 <p class="section-copy">
-                  Use the form to send your inquiry directly to ${escapeHtml(config.name)} via secure EmailJS delivery.
+                  Use the form to send your inquiry directly to ${escapeHtml(config.name)}.
                 </p>
               </div>
 
@@ -536,7 +802,7 @@
                     <img src="assets/incarnation-studios-logo.png" alt="Incarnation Studios logo mark" loading="lazy" decoding="async" />
                     <div>
                       <strong>Response Window</strong>
-                      <p>We usually respond to genuine inquiries within 24-48 hours.</p>
+                      <p>We usually respond to genuine inquiries within 24 to 48 hours.</p>
                     </div>
                   </div>
                 </article>
@@ -556,7 +822,7 @@
                   </div>
                   <button type="submit" class="btn btn-secondary btn-glitch" data-text="Send Message">Send Message</button>
                   <p class="form-status" role="status" aria-live="polite" hidden></p>
-                  <p class="form-helper">Live delivery powered by EmailJS to ${escapeHtml(config.email)}.</p>
+                  <p class="form-helper">Messages from this form are sent to ${escapeHtml(config.email)}.</p>
                 </form>
               </div>
             </div>
@@ -605,7 +871,8 @@
             </nav>
             <div class="nav-actions">
               <button type="button" class="theme-toggle" aria-label="Toggle color theme">${themeLabel}</button>
-              <a href="index.htm#games" class="btn btn-secondary btn-glitch" data-text="Back To Studio">Back To Studio</a>
+              ${routeAccountActionMarkup()}
+              <a href="index.htm#home" class="btn btn-return-home btn-glitch" data-text="Back to Home">Back to Home</a>
             </div>
           </div>
         </header>
@@ -614,12 +881,13 @@
           <section id="overview" class="game-hero">
             <div class="container game-hero-grid">
               <div class="reveal">
-                <p class="section-kicker">Dedicated Game Page</p>
+                <p class="section-kicker">Game Overview</p>
                 <h1 class="hero-title">${escapeHtml(config.game.title)}</h1>
                 <p class="section-copy">${escapeHtml(config.game.description)}</p>
                 <div class="hero-actions">
                   <a href="${escapeHtml(config.website)}" target="_blank" rel="noreferrer" class="btn btn-primary btn-glitch" data-text="Official Site">Official Site</a>
                   <a href="${escapeHtml(config.discord)}" target="_blank" rel="noreferrer" class="btn btn-ghost btn-glitch" data-text="Join Discord">Join Discord</a>
+                  <a href="index.htm#home" class="btn btn-return-home btn-glitch" data-text="Back to Home">Back to Home</a>
                 </div>
                 <p class="tagline">${escapeHtml(config.game.tagline)}</p>
               </div>
@@ -631,7 +899,7 @@
                 <div class="hud-panel" style="margin-top: 0.8rem;">
                   <div class="hud-row"><span>Build</span><strong>${escapeHtml(config.game.status)}</strong></div>
                   <div class="hud-bar"><i></i></div>
-                  <div class="hud-row"><span>Live Environment</span><strong>Dynamic Day/Night + Weather</strong></div>
+                  <div class="hud-row"><span>Studio Updates</span><strong>Official announcements and launch milestones</strong></div>
                 </div>
               </div>
             </div>
@@ -664,9 +932,9 @@
             <div class="container">
               <div class="section-head">
                 <p class="section-kicker">Community</p>
-                <h2 class="section-title">Stay Connected With The Studio</h2>
+                <h2 class="section-title">Stay Connected with the Studio</h2>
                 <p class="section-copy">
-                  Follow official channels for verified announcements, development updates, and community activities without spoilers or gameplay mechanic breakdowns.
+                  Follow official channels for verified announcements, development updates, and community activities without spoilers or detailed gameplay breakdowns.
                 </p>
               </div>
               <div class="about-grid">
@@ -718,6 +986,386 @@
     `;
   }
 
+  function authLinksMarkup() {
+    const baseLinks =
+      '<a href="index.htm#home" class="nav-link">Home</a>' +
+      '<a href="?page=' + MAYDAY_ROUTE + '" class="nav-link">Game</a>';
+    if (appState.currentUser) {
+      return (
+        baseLinks +
+        '<a href="?page=' +
+        PROFILE_ROUTE +
+        '" class="nav-link">Profile</a>' +
+        '<a href="?page=' +
+        SETTINGS_ROUTE +
+        '" class="nav-link">Settings</a>'
+      );
+    }
+    return (
+      baseLinks +
+      '<a href="?page=' +
+      LOGIN_ROUTE +
+      '" class="nav-link">Login</a>' +
+      '<a href="?page=' +
+      SIGNUP_ROUTE +
+      '" class="nav-link">Sign Up</a>'
+    );
+  }
+
+  function renderAuthShell(config, options) {
+    const theme = getStoredTheme();
+    const themeLabel = theme === "dark" ? "Light Mode" : "Dark Mode";
+    const kicker = asText(options.kicker, "Account");
+    const title = asText(options.title, "Account");
+    const copy = asText(options.copy, "");
+    const content = asText(options.content, "");
+    const notice = asText(options.notice, "");
+    const noticeMarkup = notice
+      ? '<p class="auth-notice" role="status" aria-live="polite">' + escapeHtml(notice) + "</p>"
+      : "";
+
+    root.innerHTML = `
+      <div class="auth-page">
+        <header class="top-nav">
+          <div class="container nav-content">
+            <a class="nav-brand" href="index.htm#home">
+              <img src="assets/incarnation-studios-logo.png" alt="Incarnation Studios logo" loading="eager" decoding="async" width="42" height="42" />
+              <span>${escapeHtml(config.name)}</span>
+            </a>
+            <button type="button" class="menu-toggle" aria-label="Toggle navigation" aria-expanded="false">Menu</button>
+            <nav class="nav-links" aria-label="Account navigation">
+              ${authLinksMarkup()}
+            </nav>
+            <div class="nav-actions">
+              <button type="button" class="theme-toggle" aria-label="Toggle color theme">${themeLabel}</button>
+              ${routeAccountActionMarkup()}
+              <a href="index.htm#home" class="btn btn-return-home btn-glitch" data-text="Back to Home">Back to Home</a>
+            </div>
+          </div>
+        </header>
+
+        <main id="main-content" class="auth-main">
+          <section class="section auth-section">
+            <div class="container">
+              <div class="auth-head reveal">
+                <p class="section-kicker">${escapeHtml(kicker)}</p>
+                <h1 class="section-title">${escapeHtml(title)}</h1>
+                <p class="section-copy">${escapeHtml(copy)}</p>
+                ${noticeMarkup}
+              </div>
+              ${content}
+            </div>
+          </section>
+        </main>
+
+        <footer class="site-footer">
+          <div class="container">
+            <div class="footer-grid">
+              <div>
+                <p class="footer-brand">
+                  <img src="assets/incarnation-studios-logo.png" alt="Incarnation Studios symbol" loading="lazy" decoding="async" width="30" height="30" />
+                  <span>${escapeHtml(config.name)}</span>
+                </p>
+                <p class="copyright">&copy; ${String(new Date().getFullYear())} ${escapeHtml(config.name)}. All rights reserved.</p>
+              </div>
+              <nav class="footer-links" aria-label="Footer navigation">
+                <a href="index.htm#home">Home</a>
+                <a href="?page=${MAYDAY_ROUTE}">Game Page</a>
+                <a href="${escapeHtml(config.discord)}" target="_blank" rel="noreferrer">Discord</a>
+              </nav>
+            </div>
+          </div>
+        </footer>
+      </div>
+    `;
+  }
+
+  function renderSignup(config) {
+    const content = `
+      <div class="auth-layout auth-layout-signup">
+        <section class="panel auth-card auth-card-form reveal">
+          <h3 class="auth-card-title">Create Your Account</h3>
+          <form class="auth-form signup-form" novalidate>
+            <div class="auth-field">
+              <label for="signup_name">Full Name</label>
+              <input id="signup_name" name="full_name" type="text" placeholder="Your full name" required />
+            </div>
+            <div class="auth-field">
+              <label for="signup_email">Email</label>
+              <input id="signup_email" name="email" type="email" placeholder="you@example.com" required />
+            </div>
+            <div class="auth-grid-two">
+              <div class="auth-field">
+                <label for="signup_password">Password</label>
+                <input id="signup_password" name="password" type="password" placeholder="At least 8 characters" required />
+              </div>
+              <div class="auth-field">
+                <label for="signup_confirm_password">Confirm Password</label>
+                <input id="signup_confirm_password" name="confirm_password" type="password" placeholder="Repeat password" required />
+              </div>
+            </div>
+            <div class="auth-grid-two">
+              <div class="auth-field">
+                <label for="signup_country">Country</label>
+                <input id="signup_country" name="country" type="text" placeholder="Country / Region" required />
+              </div>
+              <div class="auth-field">
+                <label for="signup_age">Age</label>
+                <input id="signup_age" name="age" type="number" min="13" max="120" placeholder="13+" required />
+              </div>
+            </div>
+
+            <div class="terms-box">
+              <h4>Terms and Conditions</h4>
+              <div class="terms-scroll">
+                <p><strong>1. Account Responsibility:</strong> You are responsible for maintaining the confidentiality of your account credentials and for all activity under your account.</p>
+                <p><strong>2. Eligibility:</strong> By creating an account, you confirm that you meet your local legal age requirements and that the information you provide is accurate.</p>
+                <p><strong>3. Acceptable Conduct:</strong> Harassment, hate speech, cheating, account abuse, or any attempt to disrupt services is strictly prohibited.</p>
+                <p><strong>4. Community Guidelines:</strong> You agree to follow moderation instructions in official community spaces, including Discord and other supported channels.</p>
+                <p><strong>5. Privacy:</strong> Your account information is used for authentication, support communication, and service updates. We do not sell personal data.</p>
+                <p><strong>6. Security:</strong> You should use a strong password and avoid reusing passwords from other platforms.</p>
+                <p><strong>7. Service Updates:</strong> Features, policies, and availability may evolve over time as the project develops.</p>
+                <p><strong>8. Termination:</strong> We reserve the right to suspend or remove accounts that violate these terms or compromise community safety.</p>
+                <p><strong>9. Contact:</strong> For concerns related to your account, contact ${escapeHtml(config.email)}.</p>
+              </div>
+              <label class="auth-checkbox">
+                <input id="signup_terms" name="accept_terms" type="checkbox" required />
+                <span>I have read and agree to the Terms and Conditions above.</span>
+              </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-glitch" data-text="Create Account">Create Account</button>
+            <p class="auth-status" role="status" aria-live="polite" hidden></p>
+            <p class="auth-helper">Already have an account? <a href="?page=${LOGIN_ROUTE}">Log in here</a>.</p>
+          </form>
+        </section>
+
+        <aside class="panel auth-card auth-card-side reveal interactive-tilt">
+          <h3 class="auth-card-title">Why Sign Up?</h3>
+          <ul class="mission-list">
+            <li>Get trusted studio updates and release announcements.</li>
+            <li>Access account-level support and communication preferences.</li>
+            <li>Keep your profile and contact settings in one place.</li>
+          </ul>
+          <div class="mini-brand">
+            <img src="assets/incarnation-studios-logo.png" alt="Incarnation Studios emblem" loading="lazy" decoding="async" />
+            <p>Incarnation Studios</p>
+          </div>
+        </aside>
+      </div>
+    `;
+
+    renderAuthShell(config, {
+      kicker: "Sign Up",
+      title: "Create Your Studio Account",
+      copy: "Join the official ecosystem to manage your profile, communication preferences, and verified updates.",
+      content,
+      notice: getRouteNotice() === "account_created" ? "Account created successfully. Please log in." : ""
+    });
+  }
+
+  function renderLogin(config, notice) {
+    const resolvedNotice = asText(notice, "");
+    const friendlyNotice =
+      resolvedNotice === "logged_out"
+        ? "You have been logged out successfully."
+        : resolvedNotice === "account_created"
+          ? "Account created. Please log in."
+          : resolvedNotice;
+
+    const content = `
+      <div class="auth-layout auth-layout-login">
+        <section class="panel auth-card auth-card-form reveal">
+          <h3 class="auth-card-title">Welcome Back</h3>
+          <form class="auth-form login-form" novalidate>
+            <div class="auth-field">
+              <label for="login_email">Email</label>
+              <input id="login_email" name="email" type="email" placeholder="you@example.com" required />
+            </div>
+            <div class="auth-field">
+              <label for="login_password">Password</label>
+              <input id="login_password" name="password" type="password" placeholder="Your password" required />
+            </div>
+            <label class="auth-checkbox">
+              <input id="login_remember" name="remember" type="checkbox" checked />
+              <span>Keep me signed in on this device.</span>
+            </label>
+
+            <button type="submit" class="btn btn-primary btn-glitch" data-text="Log In">Log In</button>
+            <p class="auth-status" role="status" aria-live="polite" hidden></p>
+            <p class="auth-helper">New here? <a href="?page=${SIGNUP_ROUTE}">Create an account</a>.</p>
+          </form>
+        </section>
+
+        <aside class="panel auth-card auth-card-side reveal interactive-tilt">
+          <h3 class="auth-card-title">Account Access</h3>
+          <p class="section-copy">Sign in to manage your profile, update preferences, and maintain verified contact routes with the studio.</p>
+          <ul class="mission-list">
+            <li>Secure account access for profile management.</li>
+            <li>Fast access to account settings and support options.</li>
+            <li>Direct links to official channels and announcements.</li>
+          </ul>
+        </aside>
+      </div>
+    `;
+
+    renderAuthShell(config, {
+      kicker: "Login",
+      title: "Access Your Account",
+      copy: "Log in with your registered credentials to continue.",
+      content,
+      notice: friendlyNotice
+    });
+  }
+
+  function renderProfile(config, user) {
+    const noticeToken = getRouteNotice();
+    const notice =
+      noticeToken === "welcome"
+        ? "Welcome. Your account is active and ready."
+        : noticeToken === "profile_updated"
+          ? "Your profile has been updated."
+          : "";
+    const content = `
+      <div class="auth-layout auth-layout-profile">
+        <section class="panel auth-card profile-card reveal">
+          <div class="profile-header">
+            <div class="profile-avatar">${escapeHtml(getUserInitials(user.name))}</div>
+            <div>
+              <h3 class="auth-card-title">${escapeHtml(user.name)}</h3>
+              <p class="section-copy">${escapeHtml(user.email)}</p>
+            </div>
+          </div>
+          <div class="profile-grid">
+            <article class="profile-item">
+              <span>Account ID</span>
+              <strong>${escapeHtml(user.id)}</strong>
+            </article>
+            <article class="profile-item">
+              <span>Country</span>
+              <strong>${escapeHtml(asText(user.country, "Not set"))}</strong>
+            </article>
+            <article class="profile-item">
+              <span>Created</span>
+              <strong>${escapeHtml(formatDateLabel(user.createdAt))}</strong>
+            </article>
+            <article class="profile-item">
+              <span>Last Login</span>
+              <strong>${escapeHtml(formatDateLabel(user.lastLoginAt))}</strong>
+            </article>
+          </div>
+          <div class="hero-actions">
+            <a href="?page=${SETTINGS_ROUTE}" class="btn btn-secondary btn-glitch" data-text="Account Settings">Account Settings</a>
+            <button type="button" class="btn btn-return-home btn-glitch auth-logout" data-text="Log Out">Log Out</button>
+          </div>
+        </section>
+
+        <aside class="panel auth-card auth-card-side reveal interactive-tilt">
+          <h3 class="auth-card-title">Profile Controls</h3>
+          <ul class="mission-list">
+            <li>Update account details and preferences in Settings.</li>
+            <li>Use secure logout whenever you are on a shared device.</li>
+            <li>Keep your profile information accurate for support requests.</li>
+          </ul>
+          <div class="hero-actions">
+            <a href="?page=${SETTINGS_ROUTE}" class="btn btn-ghost btn-glitch" data-text="Open Settings">Open Settings</a>
+            <a href="?page=${MAYDAY_ROUTE}" class="btn btn-primary btn-glitch" data-text="View Game Page">View Game Page</a>
+          </div>
+        </aside>
+      </div>
+    `;
+
+    renderAuthShell(config, {
+      kicker: "Profile",
+      title: "Your Account Profile",
+      copy: "Manage identity, account details, and secure access controls from one place.",
+      content,
+      notice
+    });
+  }
+
+  function renderAccountSettings(config, user) {
+    const notice = getRouteNotice() === "saved" ? "Settings saved successfully." : "";
+    const preferences = user.preferences && typeof user.preferences === "object" ? user.preferences : {};
+    const content = `
+      <div class="auth-layout auth-layout-settings">
+        <section class="panel auth-card auth-card-form reveal">
+          <h3 class="auth-card-title">Account Settings</h3>
+          <form class="auth-form settings-form" novalidate>
+            <div class="auth-grid-two">
+              <div class="auth-field">
+                <label for="settings_name">Display Name</label>
+                <input id="settings_name" name="display_name" type="text" value="${escapeHtml(user.name)}" required />
+              </div>
+              <div class="auth-field">
+                <label for="settings_email">Email</label>
+                <input id="settings_email" name="email" type="email" value="${escapeHtml(user.email)}" required />
+              </div>
+            </div>
+            <div class="auth-field">
+              <label for="settings_country">Country</label>
+              <input id="settings_country" name="country" type="text" value="${escapeHtml(asText(user.country, ""))}" placeholder="Country / Region" required />
+            </div>
+
+            <div class="settings-preferences">
+              <h4>Communication Preferences</h4>
+              <label class="auth-checkbox">
+                <input name="pref_updates" type="checkbox" ${preferences.pref_updates !== false ? "checked" : ""} />
+                <span>Receive important studio updates by email.</span>
+              </label>
+              <label class="auth-checkbox">
+                <input name="pref_events" type="checkbox" ${preferences.pref_events ? "checked" : ""} />
+                <span>Receive community events and announcements.</span>
+              </label>
+            </div>
+
+            <div class="settings-password">
+              <h4>Change Password</h4>
+              <div class="auth-grid-two">
+                <div class="auth-field">
+                  <label for="settings_current_password">Current Password</label>
+                  <input id="settings_current_password" name="current_password" type="password" placeholder="Current password" />
+                </div>
+                <div class="auth-field">
+                  <label for="settings_new_password">New Password</label>
+                  <input id="settings_new_password" name="new_password" type="password" placeholder="New password" />
+                </div>
+              </div>
+              <div class="auth-field">
+                <label for="settings_confirm_password">Confirm New Password</label>
+                <input id="settings_confirm_password" name="confirm_password" type="password" placeholder="Confirm new password" />
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-glitch" data-text="Save Changes">Save Changes</button>
+            <p class="auth-status" role="status" aria-live="polite" hidden></p>
+          </form>
+        </section>
+
+        <aside class="panel auth-card auth-card-side reveal interactive-tilt">
+          <h3 class="auth-card-title">Security and Session</h3>
+          <ul class="mission-list">
+            <li>Use a strong password with upper/lowercase letters and numbers.</li>
+            <li>Update your email if you change your primary contact address.</li>
+            <li>Log out after updates on shared or public systems.</li>
+          </ul>
+          <div class="hero-actions">
+            <a href="?page=${PROFILE_ROUTE}" class="btn btn-ghost btn-glitch" data-text="Back to Profile">Back to Profile</a>
+            <button type="button" class="btn btn-return-home btn-glitch auth-logout" data-text="Log Out">Log Out</button>
+          </div>
+        </aside>
+      </div>
+    `;
+
+    renderAuthShell(config, {
+      kicker: "Settings",
+      title: "Manage Account Settings",
+      copy: "Update profile details, communication preferences, and password security.",
+      content,
+      notice
+    });
+  }
+
   function startPreloader() {
     clearInterval(appState.preloaderTimer);
     appState.progress = 0;
@@ -766,6 +1414,7 @@
     bindThemeToggle();
     bindMenuToggle();
     bindContactForm();
+    bindAuthFlows();
     bindParallax();
     bindRevealAnimations();
     bindActiveNav();
@@ -890,13 +1539,7 @@
       const publicKey = asText(emailJsCfg.publicKey, "");
       const serviceId = asText(emailJsCfg.serviceId, "");
       const templateId = asText(emailJsCfg.templateId, "");
-      const hasValidConfig =
-        publicKey &&
-        serviceId &&
-        templateId &&
-        publicKey.indexOf("YOUR_EMAILJS") === -1 &&
-        serviceId.indexOf("YOUR_EMAILJS") === -1 &&
-        templateId.indexOf("YOUR_EMAILJS") === -1;
+      const hasValidConfig = isConfiguredSecret(publicKey) && isConfiguredSecret(serviceId) && isConfiguredSecret(templateId);
 
       if (status) {
         status.hidden = false;
@@ -910,11 +1553,20 @@
       }
 
       try {
-        if (!window.emailjs || typeof window.emailjs.send !== "function") {
-          throw new Error("EmailJS SDK was not loaded.");
-        }
-        if (!hasValidConfig) {
-          throw new Error("EmailJS is not configured. Add emailjs keys in config.json.");
+        if (!window.emailjs || typeof window.emailjs.send !== "function" || !hasValidConfig) {
+          const openedDraft = openMailtoDraft({
+            toEmail: recipient,
+            fromName: name,
+            fromEmail: email,
+            message
+          });
+          if (status) {
+            status.dataset.status = openedDraft ? "success" : "error";
+            status.textContent = openedDraft
+              ? "Your email app opened with a draft. Please send it to " + recipient + "."
+              : "Unable to send right now. Please email us directly at " + recipient + ".";
+          }
+          return;
         }
 
         if (appState.emailJsInitializedFor !== publicKey) {
@@ -945,9 +1597,17 @@
         }
         form.reset();
       } catch (error) {
+        const openedDraft = openMailtoDraft({
+          toEmail: recipient,
+          fromName: name,
+          fromEmail: email,
+          message
+        });
         if (status) {
-          status.dataset.status = "error";
-          status.textContent = "Unable to send right now. " + String(error && error.message ? error.message : "Please try again.");
+          status.dataset.status = openedDraft ? "success" : "error";
+          status.textContent = openedDraft
+            ? "We opened your email app with a draft message to " + recipient + "."
+            : "Unable to send right now. Please try again shortly or email us at " + recipient + ".";
         }
       } finally {
         if (submitButton) {
@@ -955,6 +1615,322 @@
           submitButton.disabled = false;
           submitButton.removeAttribute("aria-busy");
         }
+      }
+    };
+
+    form.addEventListener("submit", onSubmit);
+    addCleanup(() => form.removeEventListener("submit", onSubmit));
+  }
+
+  function openMailtoDraft(payload) {
+    const toEmail = asText(payload && payload.toEmail, OFFICIAL_EMAIL);
+    const fromName = asText(payload && payload.fromName, "Website Visitor");
+    const fromEmail = asText(payload && payload.fromEmail, "No email provided");
+    const bodyMessage = asText(payload && payload.message, "No message provided.");
+    const subject = "Website Inquiry - " + fromName;
+    const body =
+      "Name: " +
+      fromName +
+      "\nEmail: " +
+      fromEmail +
+      "\n\nMessage:\n" +
+      bodyMessage;
+    const mailtoUrl =
+      "mailto:" + encodeURIComponent(toEmail) + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+
+    try {
+      window.location.href = mailtoUrl;
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function setAuthStatus(node, type, message) {
+    if (!node) {
+      return;
+    }
+    node.hidden = false;
+    node.dataset.status = type;
+    node.textContent = message;
+  }
+
+  function isStrongPassword(password) {
+    const value = asText(password, "");
+    return value.length >= 8 && /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value);
+  }
+
+  function bindAuthFlows() {
+    bindLogoutButtons();
+    bindSignupForm();
+    bindLoginForm();
+    bindSettingsForm();
+  }
+
+  function bindLogoutButtons() {
+    const buttons = Array.from(root.querySelectorAll(".auth-logout"));
+    if (!buttons.length) {
+      return;
+    }
+
+    buttons.forEach((button) => {
+      const onClick = () => {
+        logoutCurrentUser();
+        navigateToRoute(LOGIN_ROUTE, "logged_out");
+      };
+      button.addEventListener("click", onClick);
+      addCleanup(() => button.removeEventListener("click", onClick));
+    });
+  }
+
+  function bindSignupForm() {
+    const form = root.querySelector(".signup-form");
+    if (!form) {
+      return;
+    }
+
+    const status = form.querySelector(".auth-status");
+    const submitButton = form.querySelector('button[type="submit"]');
+    let isSubmitting = false;
+
+    const onSubmit = (event) => {
+      event.preventDefault();
+      if (isSubmitting) {
+        return;
+      }
+
+      const data = new FormData(form);
+      const fullName = asText(data.get("full_name"), "");
+      const email = asText(data.get("email"), "").toLowerCase();
+      const password = asText(data.get("password"), "");
+      const confirmPassword = asText(data.get("confirm_password"), "");
+      const country = asText(data.get("country"), "");
+      const age = Number(data.get("age"));
+      const acceptedTerms = data.get("accept_terms") === "on";
+
+      if (fullName.length < 2) {
+        setAuthStatus(status, "error", "Please enter your full name.");
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setAuthStatus(status, "error", "Please enter a valid email address.");
+        return;
+      }
+      if (!isStrongPassword(password)) {
+        setAuthStatus(status, "error", "Password must be at least 8 characters and include uppercase, lowercase, and a number.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setAuthStatus(status, "error", "Password confirmation does not match.");
+        return;
+      }
+      if (!country) {
+        setAuthStatus(status, "error", "Please provide your country or region.");
+        return;
+      }
+      if (!Number.isFinite(age) || age < 13) {
+        setAuthStatus(status, "error", "You must be at least 13 years old to create an account.");
+        return;
+      }
+      if (!acceptedTerms) {
+        setAuthStatus(status, "error", "You must accept the Terms and Conditions to continue.");
+        return;
+      }
+
+      const users = getAuthUsers();
+      const duplicate = users.some((user) => user && asText(user.email, "").toLowerCase() === email);
+      if (duplicate) {
+        setAuthStatus(status, "error", "An account with this email already exists. Please log in instead.");
+        return;
+      }
+
+      const nowIso = new Date().toISOString();
+      const newUser = {
+        id: createUserId(),
+        name: fullName,
+        email,
+        password,
+        country,
+        age: String(age),
+        createdAt: nowIso,
+        lastLoginAt: nowIso,
+        preferences: {
+          pref_updates: true,
+          pref_events: false
+        }
+      };
+
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.setAttribute("aria-busy", "true");
+      }
+      isSubmitting = true;
+      setAuthUsers(users.concat([newUser]));
+      setAuthSession({ userId: newUser.id, createdAt: nowIso });
+      appState.currentUser = newUser;
+      navigateToRoute(PROFILE_ROUTE, "welcome");
+    };
+
+    form.addEventListener("submit", onSubmit);
+    addCleanup(() => form.removeEventListener("submit", onSubmit));
+  }
+
+  function bindLoginForm() {
+    const form = root.querySelector(".login-form");
+    if (!form) {
+      return;
+    }
+
+    const status = form.querySelector(".auth-status");
+    const submitButton = form.querySelector('button[type="submit"]');
+    let isSubmitting = false;
+
+    const onSubmit = (event) => {
+      event.preventDefault();
+      if (isSubmitting) {
+        return;
+      }
+
+      const data = new FormData(form);
+      const email = asText(data.get("email"), "").toLowerCase();
+      const password = asText(data.get("password"), "");
+      const remember = data.get("remember") === "on";
+
+      if (!email || !password) {
+        setAuthStatus(status, "error", "Please provide both email and password.");
+        return;
+      }
+
+      const users = getAuthUsers();
+      const user = users.find(
+        (item) =>
+          item &&
+          asText(item.email, "").toLowerCase() === email &&
+          asText(item.password, "") === password
+      );
+
+      if (!user) {
+        setAuthStatus(status, "error", "Incorrect email or password.");
+        return;
+      }
+
+      const updatedUser = {
+        ...user,
+        lastLoginAt: new Date().toISOString()
+      };
+      persistUser(updatedUser);
+      setAuthSession({
+        userId: updatedUser.id,
+        createdAt: updatedUser.lastLoginAt
+      }, remember);
+      appState.currentUser = updatedUser;
+
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.setAttribute("aria-busy", "true");
+      }
+      isSubmitting = true;
+      navigateToRoute(PROFILE_ROUTE);
+    };
+
+    form.addEventListener("submit", onSubmit);
+    addCleanup(() => form.removeEventListener("submit", onSubmit));
+  }
+
+  function bindSettingsForm() {
+    const form = root.querySelector(".settings-form");
+    if (!form) {
+      return;
+    }
+    if (!appState.currentUser) {
+      return;
+    }
+
+    const status = form.querySelector(".auth-status");
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    const onSubmit = (event) => {
+      event.preventDefault();
+      const data = new FormData(form);
+
+      const displayName = asText(data.get("display_name"), "");
+      const email = asText(data.get("email"), "").toLowerCase();
+      const country = asText(data.get("country"), "");
+      const currentPassword = asText(data.get("current_password"), "");
+      const newPassword = asText(data.get("new_password"), "");
+      const confirmPassword = asText(data.get("confirm_password"), "");
+      const wantsPasswordChange = currentPassword || newPassword || confirmPassword;
+
+      if (displayName.length < 2) {
+        setAuthStatus(status, "error", "Display name must contain at least 2 characters.");
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setAuthStatus(status, "error", "Please enter a valid email address.");
+        return;
+      }
+      if (!country) {
+        setAuthStatus(status, "error", "Please provide your country or region.");
+        return;
+      }
+
+      const users = getAuthUsers();
+      const duplicate = users.some(
+        (user) =>
+          user &&
+          user.id !== appState.currentUser.id &&
+          asText(user.email, "").toLowerCase() === email
+      );
+      if (duplicate) {
+        setAuthStatus(status, "error", "Another account already uses this email address.");
+        return;
+      }
+
+      if (wantsPasswordChange) {
+        if (!currentPassword || !newPassword || !confirmPassword) {
+          setAuthStatus(status, "error", "Fill all password fields to change your password.");
+          return;
+        }
+        if (currentPassword !== asText(appState.currentUser.password, "")) {
+          setAuthStatus(status, "error", "Current password is incorrect.");
+          return;
+        }
+        if (!isStrongPassword(newPassword)) {
+          setAuthStatus(status, "error", "New password must be at least 8 characters and include uppercase, lowercase, and a number.");
+          return;
+        }
+        if (newPassword !== confirmPassword) {
+          setAuthStatus(status, "error", "New password confirmation does not match.");
+          return;
+        }
+      }
+
+      const updatedUser = {
+        ...appState.currentUser,
+        name: displayName,
+        email,
+        country,
+        password: wantsPasswordChange ? newPassword : appState.currentUser.password,
+        preferences: {
+          pref_updates: data.get("pref_updates") === "on",
+          pref_events: data.get("pref_events") === "on"
+        }
+      };
+
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.setAttribute("aria-busy", "true");
+      }
+
+      persistUser(updatedUser);
+      appState.currentUser = updatedUser;
+      setAuthStatus(status, "success", "Settings saved successfully.");
+
+      if (submitButton) {
+        window.setTimeout(() => {
+          submitButton.disabled = false;
+          submitButton.removeAttribute("aria-busy");
+        }, 350);
       }
     };
 
