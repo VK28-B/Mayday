@@ -1,0 +1,103 @@
+{
+    "name" : "Incarnation Studios",
+    "description" : "Incarnation Studios is a game development company focused on creating immersive and engaging gaming experiences. We are dedicated to pushing the boundaries of interactive entertainment and delivering high-quality games that captivate players around the world.",
+    "website" : "https://www.incarnationstudios.in",
+    "version" : "1.0.0",
+    "tech_stack": {
+        "frontend": "React (via CDN)",
+        "styling": "Tailwind CSS (via CDN)",
+        "scripts": "Babel (for JSX support in browser)",
+        "language": "JavaScript (ES6+)"
+    },
+    "file_structure": {
+        "index.htm": "The main HTML file that serves as the entry point for the website.",
+        "style.css": "The main stylesheet for custom styles.",
+        "app.js": "The main JavaScript file that contains the website logic and UI rendering.",
+        "config.json": "Configuration details about the company, game, contact info, SEO, and EmailJS settings.",
+        "assets/": "A directory inside the project folder that contains images, icons, and other media assets used in the website.",
+        "preview.png": "A good preview image of the full website design, used for documentation and presentation purposes."
+    },
+    "design_preferences": {
+        "Primary_asthetic": "Primary Aesthetic: Dark Mode, tactical, and gritty yet sophisticated (Sleek Industrial).",
+        "color_palette": {
+            "Base": " Deep Charcoal (#121212) and Matte Black",
+            "Accent": "Emergency Orange (#FF5F1F) for Call-to-Action buttons and Radioactive Teal (#00FFC2) for data displays or HUD elements",
+            "Headlight": "Neon Green (#39FF14) for subtle highlights and interactive elements",
+            "Typography": "Use a bold, condensed Sans-Serif for headers (like 'Inter' or 'Roboto Mono') to give a military/technical feel. For body text, a clean, readable Sans-Serif (like 'Open Sans' or 'Lato') can be used to maintain clarity and professionalism.",
+            "Imagery": "Incorporate high-contrast, gritty textures and images that evoke a sense of tactical realism. Use imagery that reflects the themes of strategy, combat, and technology to align with the overall aesthetic.",
+            "Addition_color_scheme": "Consider adding a secondary color scheme with muted metallic tones (like Gunmetal Gray or Steel Blue) for additional depth and variety in design elements, while still maintaining the overall dark and tactical vibe."
+        },
+        "font_choices": {
+            "headers": "Inter or Roboto Mono",
+            "body": "Open Sans or Lato"
+        },
+        "Page_sections":{
+            "hero_section": "High-impact background (parallax forest or wreckage). Transparent navigation bar with bold, neon green logo and emergency orange call-to-action buttons. Subtle animated elements (like flickering lights or drifting smoke) to enhance the tactical atmosphere.",
+            "home": "A landing page with a bold header, a brief introduction to the company, and a call-to-action button that directs visitors to the games section.",
+            "about": "A section that provides more detailed information about the company, its mission, and its team members.",
+            "games": "A showcase of the games developed by Incarnation Studios, with images, descriptions, and links to learn more about each game.",
+            "contact": "A contact form or contact information for visitors to get in touch with the company for inquiries, support, or collaboration opportunities.",
+            "header_footer": "A consistent header and footer across all pages, with navigation links to the different sections of the website and social media icons for easy access to the company's social media profiles.",
+            "games_list": {
+                "game1": {
+                    "title": "Men in Mayday",
+                    "description": "A realistic island survival experience where every decision matters. Stranded alone in a vast, untamed wilderness, you must gather resources, craft tools, and adapt to a constantly changing environment to stay alive. From chopping down trees and building shelter to managing hunger, thirst, and stamina, survival depends on your ability to plan ahead and use what nature provides. Explore dense forests, shifting weather, and a dynamic day-night cycle that transforms the island into both a place of beauty and danger. Progression is driven by your choices—upgrade your tools, improve your efficiency, and shape your own path through the wild. This is not just about surviving… it's about mastering the environment.",
+                    "tagline": "Survive the island. Master the wild.",
+                    "status": "In Development, Coming Soon!"
+                }
+            }
+        },
+        "preloader": "A tactical boot-up screen with a progress bar and the text 'INITIALIZING SYSTEM...'"
+    },
+    "Technical_requirements": [
+        "Implement smooth scroll animations and fade-ins on scroll.",
+        "Ensure the website is fully responsive and looks great on all devices (desktop, tablet, mobile).",
+        "Use high-quality gradients and subtle noise textures to avoid a flat look.",
+        "Optimize images and assets for fast loading times without sacrificing quality.",
+        "Implement a dark mode toggle for users who prefer a different aesthetic.",
+        "Buttons should have a slight glitch animation on hover to match the survival/tech theme.",
+        "Use a consistent color scheme and typography throughout the site to maintain the tactical, gritty aesthetic.",
+        "Ensure that the website is accessible, with proper alt text for images and keyboard navigation support.",
+        "Implement a custom cursor that looks like a tactical crosshair.",
+        "Add a 'scanline' overlay effect to the hero section to mimic a military monitor.",
+        "Use a parallax effect for the background images in the hero section to create depth and immersion.",
+        "Include a section for showcasing the games developed by Incarnation Studios, with images, descriptions, and links to learn more about each game.",
+        "Implement a contact form that allows visitors to get in touch with the company for inquiries, support, or collaboration opportunities.",
+        "Ensure that the website is optimized for SEO, with appropriate meta tags, keywords, and descriptions for each page."
+    ],
+    "Contact_information": {
+        "email": "incarnation.studios.official@gmail.com",
+        "social_media": {
+            "Discord": "https://discord.gg/Ch3aUQAQ"
+        }
+    },
+    "emailjs": {
+        "public_key": "YOUR_EMAILJS_PUBLIC_KEY",
+        "service_id": "YOUR_EMAILJS_SERVICE_ID",
+        "template_id": "YOUR_EMAILJS_TEMPLATE_ID"
+    },
+    "seo_metadata": {
+        "title": "Incarnation Studios | Immersive Tactical Gaming",
+        "meta_description": "Incarnation Studios: Creators of Men in Mayday. Experience high-stakes, tactical survival on a realistic untamed island. Master the environment or perish.",
+        "keywords": [
+            "Incarnation Studios", "Men in Mayday", "Men in Mayday game", "tactical survival games", 
+            "realistic survival experience", "island survival simulator", "hardcore survival 2025", 
+            "immersive gaming", "indie game developer India", "PC survival games", "open world survival craft", 
+            "strategic combat simulator", "gritty game aesthetic", "tactical realism gaming", "industrial game design", 
+            "Men in Mayday survival guide", "best survival games 2025", "new indie game studio", 
+            "unreal engine survival game", "first person survival", "wilderness survival mechanics", 
+            "base building survival", "crafting and survival", "high-stakes gaming", "tactical shooter elements", 
+            "environmental storytelling", "dark mode gaming website", "Men in Mayday alpha", 
+            "game dev studio portfolio", "military tech aesthetic", "survival horror elements", 
+            "dynamic weather survival", "day night cycle games", "resource management games", 
+            "challenging indie games", "Men in Mayday developer", "tactical HUD design", 
+            "survival game community", "Discord gaming community", "upcoming steam games 2025", 
+            "realistic island environment", "survival crafting gameplay", "strategic wilderness survival", 
+            "indie dev log", "Men in Mayday trailer", "tactical gameplay mechanics", 
+            "hardcore permadeath games", "survival sandbox 2025", "next-gen survival indie", "master the wild"
+        ],
+        "author": "Incarnation Studios",
+        "Discord_community": "https://discord.gg/Ch3aUQAQ"
+    }
+
+}
